@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RapidAid — Multi-Unit Dispatch Demo</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --bg:       #F4F6F8;
+      --panel:    #FFFFFF;
+      --navy:     #1F4E79;
+      --blue:     #3A6EA5;
+      --red:      #C62828;
+      --amber:    #F9A825;
+      --green:    #2E7D32;
+      --border:   #D8E0EA;
+      --text:     #1A2332;
+      --mid:      #4A6080;
+      --soft:     #7A90A8;
+      --font:     'Source Sans 3', 'Segoe UI', sans-serif;
+    }
+
+    html, body { height:100%; font-family:var(--font); background:var(--bg); color:var(--text); font-size:13px; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      height: 46px;
+      background: var(--navy);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 14px;
+      flex-shrink: 0;
+      border-bottom: 3px solid var(--red);
+    }
+    .tb-logo-wrap { display:flex; align-items:center; gap:9px; padding-right:18px; border-right:1px solid rgba(255,255,255,0.15); margin-right:6px; }
+    .tb-logo { background:var(--red); color:#fff; font-size:10px; font-weight:700; padding:3px 7px; border-radius:3px; letter-spacing:0.8px; }
+    .tb-name { font-size:14px; font-weight:700; color:#fff; }
+    .tb-sub  { font-size:12px; color:rgba(255,255,255,0.55); }
+    .tb-right { margin-left:auto; display:flex; align-items:center; gap:14px; }
+    .tb-pill {
+      display:flex; align-items:center; gap:6px;
+      font-size:11px; font-weight:600;
+      padding:3px 11px; border-radius:3px;
+    }
+    .pill-live  { background:rgba(46,125,50,0.2); border:1px solid rgba(46,125,50,0.4); color:#81c784; }
+    .pill-alert { background:rgba(198,40,40,0.2); border:1px solid rgba(198,40,40,0.4); color:#ef9a9a; }
+    .blink { width:6px; height:6px; border-radius:50%; animation:blk 1s infinite; }
+    .blink.green { background:#81c784; }
+    .blink.red   { background:#ef9a9a; }
+    @keyframes blk { 0%,100%{opacity:1} 50%{opacity:0.25} }
+    .tb-clock { font-size:12px; color:rgba(255,255,255,0.7); font-variant-numeric:tabular-nums; letter-spacing:0.5px; }
+
+    /* ── LAYOUT ── */
+    .app  { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+    .body { display:flex; flex:1; overflow:hidden; }
+    #map  { flex:1; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 340px;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sec { border-bottom:1px solid var(--border); }
+    .sec-hdr {
+      padding:9px 14px;
+      font-size:10px; font-weight:700; color:var(--soft);
+      letter-spacing:1px; text-transform:uppercase;
+      background:var(--bg); border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .sec-body { padding:12px 14px; }
+
+    /* ── SCENARIO BOX ── */
+    .scenario-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius:4px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--mid);
+      line-height: 1.6;
+    }
+    .scenario-box b { color:var(--text); }
+    .scenario-box .highlight { color:var(--red); font-weight:600; }
+
+    /* ── DISPATCH BUTTON ── */
+    .dispatch-btn {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--red);
+      border: none; border-radius:4px;
+      color: #fff; font-size:13px; font-weight:700;
+      cursor: pointer; letter-spacing:0.3px;
+      font-family: var(--font);
+      transition: background 0.15s;
+      display: flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .dispatch-btn:hover   { background:#a31e1e; }
+    .dispatch-btn:disabled { background:#b0bec5; cursor:not-allowed; }
+    .reset-btn {
+      width:100%; padding:8px; margin-top:6px;
+      background:transparent; border:1px solid var(--border);
+      border-radius:4px; color:var(--soft); font-size:12px;
+      cursor:pointer; transition:all 0.15s; font-family:var(--font);
+    }
+    .reset-btn:hover { border-color:var(--blue); color:var(--blue); }
+
+    /* ── LAYER TOGGLES ── */
+    .toggle-row { display:flex; gap:6px; }
+    .tog {
+      flex:1; padding:7px; border-radius:4px;
+      border:1px solid var(--border); background:var(--bg);
+      color:var(--soft); font-size:11px; font-weight:600;
+      cursor:pointer; transition:all 0.15s; text-align:center;
+      font-family:var(--font);
+    }
+    .tog.on { border-color:var(--blue); color:var(--blue); background:#e8f0f9; }
+
+    /* ── AMBULANCE CARDS ── */
+    .amb-card {
+      border:1px solid var(--border);
+      border-radius:4px;
+      padding:10px 12px;
+      margin-bottom:8px;
+      position:relative;
+      overflow:hidden;
+      background:var(--bg);
+      transition: all 0.3s;
+    }
+    .amb-card.dispatched {
+      border-color:var(--blue);
+      background:#f0f5fb;
+      border-left:3px solid var(--blue);
+    }
+    .amb-card.rejected {
+      border-color:var(--border);
+      background:#fafbfc;
+      border-left:3px solid #b0bec5;
+      opacity:0.75;
+    }
+    .amb-card.loading { opacity:0.6; }
+
+    .amb-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .amb-name   { font-size:12px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:7px; }
+    .amb-dir    { font-size:10px; color:var(--soft); font-weight:400; }
+
+    .amb-tag {
+      font-size:10px; font-weight:700; padding:2px 8px;
+      border-radius:3px; letter-spacing:0.3px;
+    }
+    .tag-standby    { background:var(--bg); color:var(--soft); border:1px solid var(--border); }
+    .tag-dispatched { background:var(--navy); color:#fff; }
+    .tag-rejected   { background:#e8ecf2; color:var(--soft); }
+    .tag-calc       { background:#e8f0f9; color:var(--blue); border:1px solid #c8d8f0; }
+
+    .amb-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; }
+    .stat-box  { background:#fff; border:1px solid var(--border); border-radius:3px; padding:6px; text-align:center; }
+    .stat-val  { font-size:14px; font-weight:700; color:var(--text); font-variant-numeric:tabular-nums; }
+    .stat-lbl  { font-size:9px; color:var(--soft); margin-top:1px; text-transform:uppercase; letter-spacing:0.4px; }
+    .dispatched .stat-val { color:var(--blue); }
+    .rejected   .stat-val { color:#8a9ab0; }
+
+    .delay-warn { color:var(--red) !important; }
+    .delay-ok   { color:var(--green) !important; }
+
+    .amb-winner-note {
+      margin-top:8px;
+      font-size:11px;
+      font-weight:600;
+      color:var(--navy);
+      padding-top:7px;
+      border-top:1px solid #c8d8f0;
+    }
+
+    /* ── INSIGHT ── */
+    .insight-panel {
+      background:var(--navy);
+      border-radius:4px;
+      padding:12px 14px;
+    }
+    .ins-label { font-size:10px; font-weight:700; color:rgba(255,255,255,0.5); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+    .ins-text  { font-size:12px; color:#fff; line-height:1.65; }
+    .ins-text .hi   { color:#90caf9; font-weight:700; }
+    .ins-text .warn { color:#ef9a9a; font-weight:700; }
+    .ins-text .stat { color:#a5d6a7; font-weight:700; }
+
+    /* ── MAP LEGEND ── */
+    .legend-card {
+      position:absolute; top:10px; left:10px;
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:4px; padding:8px 12px;
+      z-index:999; box-shadow:0 2px 8px rgba(0,0,0,0.1);
+      min-width:170px;
+    }
+    .leg-title { font-size:10px; font-weight:700; color:var(--soft); letter-spacing:0.8px; text-transform:uppercase; margin-bottom:6px; }
+    .leg-item  { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--mid); margin-bottom:3px; font-family:var(--font); }
+    .leg-dot   { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .leg-sq    { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+    .leg-line  { width:18px; height:2px; border-radius:1px; flex-shrink:0; }
+
+    /* ── STATUS BAR ── */
+    .statusbar {
+      height:28px; background:#1a2e45;
+      display:flex; align-items:center; padding:0 14px; gap:18px;
+      flex-shrink:0; border-top:1px solid rgba(255,255,255,0.06);
+    }
+    .sb-item { display:flex; align-items:center; gap:6px; font-size:11px; color:rgba(255,255,255,0.45); }
+    .sb-dot  { width:6px; height:6px; border-radius:50%; }
+    .sb-dot.g { background:var(--green); }
+    .sb-dot.r { background:var(--red); animation:blk 1s infinite; }
+    .sb-dot.a { background:var(--amber); }
+
+    /* ── SPINNER ── */
+    .spinner {
+      display:inline-block; width:11px; height:11px;
+      border:2px solid rgba(255,255,255,0.3); border-top-color:#fff;
+      border-radius:50%; animation:spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── LEAFLET ── */
+    .leaflet-popup-content-wrapper {
+      background:#fff; border:1px solid var(--border);
+      border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
+    .leaflet-popup-tip { background:#fff; }
+    .leaflet-popup-content { font-size:12px; font-family:var(--font); color:var(--text); margin:10px 13px; line-height:1.5; }
+    .leaflet-popup-content b { color:var(--navy); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="tb-logo-wrap">
+      <span class="tb-logo">EMS</span>
+      <span class="tb-name">RapidAid</span>
+    </div>
+    <span class="tb-sub">Multi-Unit Dispatch Demo — Doon Hospital, Dehradun</span>
+    <div class="tb-right">
+      <div class="tb-pill pill-alert">
+        <div class="blink red"></div>
+        EMERGENCY ACTIVE
+      </div>
+      <div class="tb-pill pill-live">
+        <div class="blink green"></div>
+        TomTom Traffic Live
+      </div>
+      <div class="tb-clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- MAP -->
+    <div style="flex:1;position:relative;">
+      <div id="map" style="width:100%;height:100%;"></div>
+
+      <!-- Legend -->
+      <div class="legend-card">
+        <div class="leg-title">Map Legend</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--red);animation:blk 0.8s infinite"></div>Emergency (Hospital)</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>AMB-01 — North</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--amber)"></div>AMB-02 — East</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>AMB-03 — West</div>
+        <div class="leg-item"><div class="leg-line" style="background:var(--blue)"></div>Selected route</div>
+        <div class="leg-item"><div class="leg-line" style="background:#8ab0d0;border-top:2px dashed #8ab0d0;height:0"></div>Other routes</div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <!-- Scenario -->
+      <div class="sec">
+        <div class="sec-hdr">Dispatch Scenario</div>
+        <div class="sec-body">
+          <div class="scenario-box">
+            <b>Emergency at Doon Hospital</b><br>
+            3 ambulances available — all approximately <b>3 km</b> from the hospital, approaching from <b>different directions</b>.<br><br>
+            <span class="highlight">Traditional system</span> would pick the nearest unit.<br>
+            <b>RapidAid</b> picks the fastest using live traffic.
+          </div>
+          <button class="dispatch-btn" id="dispatchBtn" onclick="runDispatch()">
+            CALCULATE &amp; DISPATCH FASTEST
+          </button>
+          <button class="reset-btn" id="resetBtn" onclick="resetAll()" style="display:none">
+            ↺ Reset Demo
+          </button>
+        </div>
+      </div>
+
+      <!-- Layers -->
+      <div class="sec">
+        <div class="sec-hdr">Map Layers</div>
+        <div class="sec-body">
+          <div class="toggle-row">
+            <div class="tog on" id="btn-traffic" onclick="toggleLayer('traffic')">Traffic Flow</div>
+            <div class="tog" id="btn-incidents" onclick="toggleLayer('incidents')">Incidents</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ambulance cards -->
+      <div class="sec" style="flex:1">
+        <div class="sec-hdr">
+          Fleet Status — Live ETA
+          <span style="font-size:10px;color:var(--soft);font-weight:400;letter-spacing:0">~3 km each</span>
+        </div>
+        <div class="sec-body" id="ambCards">
+          <!-- rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Insight -->
+      <div class="sec" id="insightSec" style="display:none">
+        <div class="sec-hdr">Dispatch Decision</div>
+        <div class="sec-body">
+          <div class="insight-panel" id="insightBox"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="sb-item"><div class="sb-dot g"></div>Firebase — Connected</div>
+    <div class="sb-item"><div class="sb-dot g"></div>TomTom API — Live</div>
+    <div class="sb-item"><div class="sb-dot r"></div>1 Emergency Active</div>
+    <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.25)">RapidAid · Doon Hospital EMS · Dehradun</div>
+    <div class="sb-item" style="margin-left:0"><div class="sb-dot g"></div><span id="statusText">Ready — click Dispatch to calculate live ETAs</span></div>
+  </div>
+
+</div><!-- /app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════
+// ▶▶ PASTE YOUR TOMTOM API KEY HERE
+//    Free: https://developer.tomtom.com
+// ═══════════════════════════════════════════════
+const TOMTOM_KEY = "YFpZsg58pIuNVIWX51WPtGuzyD3JqkLi";
+
+// ── Clock ────────────────────────────────────────
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString("en-IN", { hour12:false });
+}, 1000);
+
+// ── Locations ────────────────────────────────────
+// Hospital — Doon Hospital, Dehradun
+const HOSPITAL = { lat:30.3165, lng:78.0322, name:"Doon Hospital" };
+
+// 3 ambulances ~3km from hospital, different compass directions
+// North: Rajpur Road area
+// East:  Niranjanpur / Haridwar bypass side
+// West:  Ballupur / Chakrata road side
+const AMBULANCES = [
+  {
+    id:"AMB-01", direction:"North",
+    lat:30.3450, lng:78.0330,   // ~3.2km north
+    color:"#C62828", colorName:"red"
+  },
+  {
+    id:"AMB-02", direction:"East",
+    lat:30.3180, lng:78.0720,   // ~3.1km east
+    color:"#F9A825", colorName:"amber"
+  },
+  {
+    id:"AMB-03", direction:"West",
+    lat:30.3155, lng:77.9970,   // ~3.0km west
+    color:"#2E7D32", colorName:"green"
+  }
+];
+
+// ── State ────────────────────────────────────────
+let map, trafficLayer, incidentLayer;
+let routeLayers = [], ambMarkers = [];
+let layerState = { traffic:true, incidents:false };
+let dispatched = false;
+
+// ── Init map ──────────────────────────────────────
+function initMap() {
+  map = L.map("map", { center:[30.3200, 78.0350], zoom:13 });
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:"© OpenStreetMap", maxZoom:19
+  }).addTo(map);
+
+  // TomTom traffic — thin lines
+  trafficLayer = L.tileLayer(
+    `https://api.tomtom.com/traffic/map/4/tile/flow/relative/{z}/{x}/{y}.png?key=${TOMTOM_KEY}&thickness=3`,
+    { opacity:0.55, maxZoom:19 }
+  ).addTo(map);
+
+  incidentLayer = L.tileLayer(
+    `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${TOMTOM_KEY}`,
+    { opacity:0.85, maxZoom:19 }
+  );
+
+  // Hospital marker — flashing red square
+  const hospIcon = L.divIcon({
+    html:`<div style="
+      width:16px;height:16px;border-radius:3px;
+      background:#C62828;border:3px solid #fff;
+      box-shadow:0 1px 8px rgba(198,40,40,0.5);
+      animation:blk 0.8s infinite
+    "></div>`,
+    className:"", iconSize:[16,16], iconAnchor:[8,8]
+  });
+  L.marker([HOSPITAL.lat, HOSPITAL.lng], {icon:hospIcon})
+   .addTo(map)
+   .bindPopup(`<b>🚨 EMERGENCY — ${HOSPITAL.name}</b><br>Trauma Centre<br>Awaiting ambulance dispatch`);
+
+  // Ambulance markers
+  AMBULANCES.forEach((amb, i) => {
+    const icon = L.divIcon({
+      html:`<div style="
+        width:13px;height:13px;border-radius:50%;
+        background:${amb.color};border:2px solid #fff;
+        box-shadow:0 1px 5px rgba(0,0,0,0.3)
+      "></div>`,
+      className:"", iconSize:[13,13], iconAnchor:[6,6]
+    });
+    const m = L.marker([amb.lat, amb.lng], {icon})
+      .addTo(map)
+      .bindPopup(`<b>${amb.id}</b> — ${amb.direction}<br>~3 km from hospital<br>Status: Standby`);
+    ambMarkers.push(m);
+  });
+
+  renderCards(null, null);
+}
+
+// ── Layer toggle ──────────────────────────────────
+function toggleLayer(type) {
+  layerState[type] = !layerState[type];
+  const btn = document.getElementById("btn-" + type);
+  if (type === "traffic") {
+    layerState.traffic ? trafficLayer.addTo(map) : map.removeLayer(trafficLayer);
+    btn.classList.toggle("on", layerState.traffic);
+  }
+  if (type === "incidents") {
+    layerState.incidents ? incidentLayer.addTo(map) : map.removeLayer(incidentLayer);
+    btn.classList.toggle("on", layerState.incidents);
+  }
+}
+
+// ── TomTom route call ─────────────────────────────
+async function fetchRoute(fromLat, fromLng, toLat, toLng) {
+  const url =
+    `https://api.tomtom.com/routing/1/calculateRoute/` +
+    `${fromLat},${fromLng}:${toLat},${toLng}/json` +
+    `?routeType=fastest&traffic=true&travelMode=car` +
+    `&routeRepresentation=polyline&key=${TOMTOM_KEY}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`TomTom ${res.status} — ${txt.slice(0,150)}`);
+  }
+  const data    = await res.json();
+  const route   = data.routes[0];
+  const summary = route.summary;
+  const points  = route.legs[0].points;
+
+  return {
+    etaMin:       Math.round(summary.travelTimeInSeconds / 60),
+    etaSec:       summary.travelTimeInSeconds,
+    distKm:       (summary.lengthInMeters / 1000).toFixed(1),
+    trafficDelay: Math.round((summary.trafficDelayInSeconds || 0) / 60),
+    latlngs:      points.map(p => [p.latitude, p.longitude])
+  };
+}
+
+// ── Draw route ────────────────────────────────────
+function drawLine(latlngs, color, weight, opacity, dash) {
+  const opts = { color, weight, opacity, lineJoin:"round", lineCap:"round" };
+  if (dash) opts.dashArray = dash;
+  const l = L.polyline(latlngs, opts).addTo(map);
+  routeLayers.push(l);
+}
+function clearRoutes() { routeLayers.forEach(l => map.removeLayer(l)); routeLayers = []; }
+
+// ── Render ambulance cards ────────────────────────
+function renderCards(results, fastestIdx) {
+  const c = document.getElementById("ambCards");
+  const loading = results === "loading";
+  c.innerHTML = "";
+
+  AMBULANCES.forEach((amb, i) => {
+    const r = results && !loading ? results[i] : null;
+    const isFastest = fastestIdx === i;
+
+    let tag = `<span class="amb-tag tag-standby">STANDBY</span>`;
+    if (loading)              tag = `<span class="amb-tag tag-calc"><span class="spinner"></span> Calculating</span>`;
+    else if (r && isFastest)  tag = `<span class="amb-tag tag-dispatched">DISPATCHED</span>`;
+    else if (r && !isFastest) tag = `<span class="amb-tag tag-rejected">NOT SELECTED</span>`;
+
+    let stats = `
+      <div class="stat-box"><div class="stat-val">—</div><div class="stat-lbl">ETA</div></div>
+      <div class="stat-box"><div class="stat-val">—</div><div class="stat-lbl">Distance</div></div>
+      <div class="stat-box"><div class="stat-val">—</div><div class="stat-lbl">Traffic +</div></div>`;
+
+    if (r) {
+      const delayCls = r.trafficDelay > 0 ? "delay-warn" : "delay-ok";
+      stats = `
+        <div class="stat-box">
+          <div class="stat-val">${r.etaMin} min</div>
+          <div class="stat-lbl">ETA</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val">${r.distKm} km</div>
+          <div class="stat-lbl">Distance</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val ${delayCls}">${r.trafficDelay > 0 ? `+${r.trafficDelay}m` : "Clear"}</div>
+          <div class="stat-lbl">Traffic +</div>
+        </div>`;
+    }
+
+    const cardClass = !r ? "" : isFastest ? "dispatched" : "rejected";
+
+    const card = document.createElement("div");
+    card.className = `amb-card ${cardClass} ${loading ? "loading" : ""}`;
+    card.innerHTML = `
+      <div class="amb-header">
+        <span class="amb-name">
+          <span style="width:9px;height:9px;border-radius:50%;background:${amb.color};display:inline-block;flex-shrink:0"></span>
+          ${amb.id}
+          <span class="amb-dir">— ${amb.direction}</span>
+        </span>
+        ${tag}
+      </div>
+      <div class="amb-stats">${stats}</div>
+      ${isFastest && r ? `<div class="amb-winner-note">⚡ Selected — fastest ETA despite similar distance</div>` : ""}
+    `;
+    c.appendChild(card);
+  });
+}
+
+// ── Render insight ────────────────────────────────
+function renderInsight(results, fastestIdx) {
+  const winner = results[fastestIdx];
+  const others = results.filter((_, i) => i !== fastestIdx);
+  const maxOtherEta = Math.max(...others.map(r => r.etaMin));
+  const saved = maxOtherEta - winner.etaMin;
+
+  // Find nearest by distance
+  const nearestIdx = results.reduce(
+    (best, r, i) => parseFloat(r.distKm) < parseFloat(results[best].distKm) ? i : best, 0
+  );
+  const nearestIsWinner = nearestIdx === fastestIdx;
+
+  let html = `<div class="ins-label">RapidAid Dispatch Decision</div><div class="ins-text">`;
+
+  if (!nearestIsWinner) {
+    html += `
+      <span class="warn">Traditional dispatch</span> would send
+      <b>${AMBULANCES[nearestIdx].id}</b> (nearest — ${results[nearestIdx].distKm} km,
+      <b>${results[nearestIdx].etaMin} min ETA</b>).<br><br>
+      <span class="hi">RapidAid</span> dispatched
+      <b>${AMBULANCES[fastestIdx].id}</b> from the ${AMBULANCES[fastestIdx].direction}
+      (${winner.distKm} km, <b>${winner.etaMin} min ETA</b>).<br><br>
+      ⏱ <span class="stat">Time saved: ${saved} minute${saved!==1?"s":""}</span>
+      vs traditional system.<br>
+      💓 Each minute = <span class="stat">6% higher survival</span> in cardiac arrest.
+    `;
+  } else {
+    html += `
+      All units are approximately equal distance.<br><br>
+      <span class="hi">RapidAid</span> confirmed
+      <b>${AMBULANCES[fastestIdx].id}</b> from the ${AMBULANCES[fastestIdx].direction}
+      as the fastest — <b>${winner.etaMin} min ETA</b> — based on live traffic.<br><br>
+      ${winner.trafficDelay > 0
+        ? `Traffic delay of <span class="warn">+${winner.trafficDelay} min</span> detected on other routes. TomTom data is active.`
+        : `<span class="stat">All routes clear</span> — TomTom confirms no significant congestion.`}
+    `;
+  }
+
+  html += `</div>`;
+  document.getElementById("insightBox").innerHTML = html;
+  document.getElementById("insightSec").style.display = "block";
+}
+
+// ── Main dispatch ─────────────────────────────────
+async function runDispatch() {
+  if (dispatched) return;
+  dispatched = true;
+
+  const btn = document.getElementById("dispatchBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>&nbsp; Querying TomTom API...`;
+  document.getElementById("statusText").textContent =
+    "Calculating live ETA for all 3 units simultaneously...";
+
+  clearRoutes();
+  renderCards("loading", null);
+
+  try {
+    // All 3 routes in parallel
+    const results = await Promise.all(
+      AMBULANCES.map(a => fetchRoute(a.lat, a.lng, HOSPITAL.lat, HOSPITAL.lng))
+    );
+
+    // Find fastest
+    const fastestIdx = results.reduce(
+      (best, r, i) => r.etaSec < results[best].etaSec ? i : best, 0
+    );
+
+    // Draw other routes first (underneath) — dashed red
+    results.forEach((r, i) => {
+      if (i !== fastestIdx) {
+        drawLine(r.latlngs, "#ffffff", 4, 0.4);           // white outline
+        drawLine(r.latlngs, "#C62828", 2.5, 0.75, "7, 6"); // red dashed
+      }
+    });
+
+    // Draw fastest on top — blue solid with white outline
+    drawLine(results[fastestIdx].latlngs, "#ffffff", 6, 0.5);
+    drawLine(results[fastestIdx].latlngs, "#3A6EA5", 3.5, 1.0);
+
+    // Fit all routes in view
+    const allPts = results.flatMap(r => r.latlngs);
+    map.fitBounds(L.latLngBounds(allPts), { padding:[50,60] });
+
+    // Update popups
+    AMBULANCES.forEach((amb, i) => {
+      const r = results[i];
+      const status = i === fastestIdx ? "✅ DISPATCHED" : "❌ Not selected";
+      ambMarkers[i].getPopup().setContent(
+        `<b>${amb.id}</b> — ${amb.direction}<br>
+         ETA: <b>${r.etaMin} min</b> | Distance: <b>${r.distKm} km</b><br>
+         Traffic delay: <b>${r.trafficDelay > 0 ? `+${r.trafficDelay} min` : "None"}</b><br>
+         ${status}`
+      );
+    });
+
+    renderCards(results, fastestIdx);
+    renderInsight(results, fastestIdx);
+
+    const w = results[fastestIdx];
+    document.getElementById("statusText").textContent =
+      `${AMBULANCES[fastestIdx].id} dispatched — ETA ${w.etaMin} min | ${w.distKm} km | TomTom live data confirmed`;
+
+    btn.innerHTML = `✅ ${AMBULANCES[fastestIdx].id} Dispatched — ${w.etaMin} min`;
+    document.getElementById("resetBtn").style.display = "block";
+
+  } catch (err) {
+    console.error(err);
+    dispatched = false;
+    btn.disabled = false;
+    btn.innerHTML = "CALCULATE &amp; DISPATCH FASTEST";
+    document.getElementById("statusText").textContent = "Error: " + err.message;
+    renderCards(null, null);
+  }
+}
+
+// ── Reset ─────────────────────────────────────────
+function resetAll() {
+  clearRoutes();
+  dispatched = false;
+  renderCards(null, null);
+  document.getElementById("insightSec").style.display = "none";
+  document.getElementById("dispatchBtn").disabled = false;
+  document.getElementById("dispatchBtn").innerHTML = "CALCULATE &amp; DISPATCH FASTEST";
+  document.getElementById("resetBtn").style.display = "none";
+  document.getElementById("statusText").textContent = "Ready — click Dispatch to calculate live ETAs";
+  map.setView([30.3200, 78.0350], 13);
+  ambMarkers.forEach((m, i) =>
+    m.getPopup().setContent(`<b>${AMBULANCES[i].id}</b> — ${AMBULANCES[i].direction}<br>~3 km from hospital<br>Status: Standby`)
+  );
+}
+
+initMap();
+</script>
+</body>
+</html>

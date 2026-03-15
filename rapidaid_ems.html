@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RapidAid — EMS Dispatch Console</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <style>
+    :root {
+      --bg:#f4f5f7; --panel:#ffffff; --border:#d0d5dd; --border-dark:#b0b7c3;
+      --text:#1a2130; --text-sec:#5a6478; --text-muted:#8a92a6;
+      --blue:#1a56a0; --blue-lt:#e8f0fb; --blue-mid:#2d6bbf;
+      --red:#c0392b; --red-lt:#fdf2f1;
+      --green:#1a7a3c; --green-lt:#edf7f1;
+      --amber:#b45309; --amber-lt:#fffbeb;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Segoe UI',system-ui,sans-serif;
+      background:var(--bg); color:var(--text);
+      height:100vh; display:flex; flex-direction:column; font-size:13px;
+    }
+
+    /* HEADER */
+    .header {
+      height:48px; background:var(--blue);
+      display:flex; align-items:center; padding:0 18px; gap:16px;
+      flex-shrink:0; border-bottom:2px solid #14407a;
+    }
+    .hcross {
+      width:26px; height:26px; background:#fff; border-radius:4px;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .hcross svg { width:16px; height:16px; }
+    .htitle  { font-size:15px; font-weight:700; color:#fff; letter-spacing:0.3px; }
+    .hsub    { font-size:11px; color:rgba(255,255,255,0.6); }
+    .hdiv    { width:1px; height:22px; background:rgba(255,255,255,0.25); }
+    .hmeta   { font-size:11px; color:rgba(255,255,255,0.65); }
+    .hlive {
+      margin-left:auto; display:flex; align-items:center; gap:6px;
+      background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+      border-radius:3px; padding:4px 10px;
+      font-size:11px; color:#fff; font-weight:600; letter-spacing:0.5px;
+    }
+    .ldot { width:7px; height:7px; border-radius:50%; background:#4ade80; animation:pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* LAYOUT */
+    .main { display:flex; flex:1; overflow:hidden; }
+    #map  { flex:1; }
+
+    /* SIDEBAR */
+    .sidebar {
+      width:320px; background:var(--panel);
+      border-left:1px solid var(--border);
+      display:flex; flex-direction:column; overflow-y:auto;
+    }
+    .section { padding:14px 16px; border-bottom:1px solid var(--border); }
+    .sec-label {
+      font-size:10px; font-weight:700; color:var(--text-muted);
+      letter-spacing:1.2px; text-transform:uppercase; margin-bottom:10px;
+    }
+
+    /* INPUTS */
+    .fgroup { margin-bottom:10px; }
+    .flabel {
+      font-size:11px; font-weight:600; color:var(--text-sec);
+      margin-bottom:5px; display:flex; align-items:center; gap:6px;
+    }
+    .fmarker { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .crow { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .cinput {
+      width:100%; background:#f8f9fb; border:1px solid var(--border);
+      border-radius:4px; padding:7px 10px; color:var(--text);
+      font-size:12px; font-family:'Courier New',monospace;
+      outline:none; transition:border-color 0.15s,background 0.15s;
+    }
+    .cinput:focus { border-color:var(--blue-mid); background:#fff; box-shadow:0 0 0 2px rgba(29,91,165,0.1); }
+    .cinput::placeholder { color:#b8bece; }
+
+    /* PRESETS */
+    .plabel { font-size:10px; color:var(--text-muted); margin-bottom:5px; margin-top:8px; }
+    .prow   { display:flex; flex-direction:column; gap:4px; }
+    .pbtn {
+      padding:6px 10px; background:var(--blue-lt); border:1px solid #c5d8f5;
+      border-radius:3px; color:var(--blue); font-size:11px; font-weight:500;
+      cursor:pointer; transition:all 0.15s; text-align:left;
+    }
+    .pbtn:hover { background:#d8e8f8; border-color:var(--blue-mid); }
+
+    /* BUTTONS */
+    .go-btn {
+      width:100%; padding:10px 16px; background:var(--red);
+      border:none; border-radius:4px; color:#fff;
+      font-size:12px; font-weight:700; cursor:pointer;
+      letter-spacing:0.6px; text-transform:uppercase;
+      transition:background 0.15s;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .go-btn:hover   { background:#a93224; }
+    .go-btn:disabled { background:#c8cdd8; cursor:not-allowed; color:#8a92a6; }
+    .reset-btn {
+      width:100%; padding:8px 16px; margin-top:6px;
+      background:transparent; border:1px solid var(--border);
+      border-radius:4px; color:var(--text-sec); font-size:11px; cursor:pointer;
+      transition:all 0.15s;
+    }
+    .reset-btn:hover { border-color:var(--blue-mid); color:var(--blue); background:var(--blue-lt); }
+
+    /* TOGGLES */
+    .trow { display:flex; gap:6px; }
+    .tbtn {
+      flex:1; padding:7px 8px; border-radius:3px; border:1px solid var(--border);
+      background:#f8f9fb; color:var(--text-sec);
+      font-size:11px; font-weight:600; cursor:pointer; transition:all 0.15s; text-align:center;
+    }
+    .tbtn.on { border-color:var(--blue-mid); background:var(--blue-lt); color:var(--blue); }
+
+    /* LEGEND */
+    .legend { display:flex; gap:14px; margin-top:9px; }
+    .leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--text-muted); }
+    .leg-line { width:18px; height:3px; border-radius:2px; }
+
+    /* ROUTE CARDS */
+    .rcard {
+      border-radius:4px; padding:12px; margin-bottom:8px;
+      border:1px solid var(--border); background:#f8f9fb;
+      position:relative; overflow:hidden;
+    }
+    .rcard::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
+    .rcard.winner { background:var(--green-lt); border-color:#a8d5bc; }
+    .rcard.winner::before { background:var(--green); }
+    .rcard.loser  { background:var(--red-lt); border-color:#f0c0bb; opacity:0.9; }
+    .rcard.loser::before  { background:var(--red); }
+
+    .rheader { display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
+    .rname { font-size:12px; font-weight:700; color:var(--text); }
+    .rtag { font-size:10px; font-weight:700; padding:2px 8px; border-radius:2px; }
+    .tag-sel  { background:#d1ead9; color:var(--green); border:1px solid #a8d5bc; }
+    .tag-slow { background:#fde8e5; color:var(--red);   border:1px solid #f0c0bb; }
+    .tag-calc { background:var(--blue-lt); color:var(--blue); border:1px solid #c5d8f5; }
+
+    .rstats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; }
+    .scell {
+      background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,0.07);
+      border-radius:3px; padding:6px 8px; text-align:center;
+    }
+    .sval { font-size:15px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
+    .slbl { font-size:9px; color:var(--text-muted); margin-top:1px; text-transform:uppercase; letter-spacing:0.5px; }
+    .winner .sval { color:var(--green); }
+    .loser  .sval { color:var(--red); }
+    .rnote { margin-top:8px; font-size:11px; color:var(--text-sec); line-height:1.5; }
+
+    /* ALERT */
+    .alert-row {
+      background:var(--amber-lt); border:1px solid #fcd34d;
+      border-left:3px solid var(--amber); border-radius:3px;
+      padding:8px 10px; font-size:11px; color:var(--amber);
+      font-weight:600; margin-top:8px; display:none;
+    }
+
+    /* ANALYSIS */
+    .abox {
+      background:var(--blue-lt); border:1px solid #c5d8f5;
+      border-radius:4px; padding:12px;
+      font-size:11px; line-height:1.7; color:var(--text-sec);
+    }
+    .abox .hi   { color:var(--green); font-weight:700; }
+    .abox .warn { color:var(--red);   font-weight:700; }
+    .abox .key  { color:var(--blue);  font-weight:700; }
+    .abox .amb  { color:var(--amber); font-weight:700; }
+
+    /* STATUS BAR */
+    .sbar {
+      height:30px; background:#1a2130;
+      display:flex; align-items:center; padding:0 16px; gap:10px;
+      flex-shrink:0; border-top:1px solid #0d1018;
+    }
+    .sdot { width:6px; height:6px; border-radius:50%; background:#4ade80; flex-shrink:0; }
+    .stxt { font-size:11px; color:#8a9ab8; font-family:'Courier New',monospace; }
+    .sclock { margin-left:auto; font-size:10px; color:#5a6a88; font-family:'Courier New',monospace; }
+
+    /* SPINNER */
+    .sp  { display:inline-block; width:11px; height:11px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
+    .spd { display:inline-block; width:11px; height:11px; border:2px solid rgba(29,91,165,0.25); border-top-color:var(--blue); border-radius:50%; animation:spin 0.7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Leaflet */
+    .leaflet-popup-content-wrapper { background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 2px 10px rgba(0,0,0,0.12); color:var(--text); }
+    .leaflet-popup-tip { background:#fff; }
+    .leaflet-popup-content { font-size:12px; line-height:1.6; margin:10px 14px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="hcross">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="1" width="4" height="14" rx="1" fill="#c0392b"/>
+        <rect x="1" y="6" width="14" height="4" rx="1" fill="#c0392b"/>
+      </svg>
+    </div>
+    <div>
+      <div class="htitle">RapidAid EMS</div>
+      <div class="hsub">Emergency Dispatch Console</div>
+    </div>
+    <div class="hdiv"></div>
+    <div class="hmeta">Dehradun District &nbsp;·&nbsp; Uttarakhand State EMS</div>
+  </div>
+  <div class="hlive"><div class="ldot"></div>TRAFFIC LIVE</div>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="sidebar">
+
+    <div class="section">
+      <div class="sec-label">Location Entry</div>
+      <div class="fgroup">
+        <div class="flabel"><div class="fmarker" style="background:#c0392b"></div>Origin</div>
+        <div class="crow">
+          <input class="cinput" id="fromLat" placeholder="Latitude"  type="number" step="any"/>
+          <input class="cinput" id="fromLng" placeholder="Longitude" type="number" step="any"/>
+        </div>
+      </div>
+      <div class="fgroup" style="margin-bottom:0">
+        <div class="flabel"><div class="fmarker" style="background:#1a56a0;border-radius:2px"></div>Destination</div>
+        <div class="crow">
+          <input class="cinput" id="toLat" placeholder="Latitude"  type="number" step="any"/>
+          <input class="cinput" id="toLng" placeholder="Longitude" type="number" step="any"/>
+        </div>
+      </div>
+      <div class="plabel">Quick locations (Dehradun)</div>
+      <div class="prow">
+        <div class="pbtn" onclick="loadPreset('rajpur')">Rajpur Road &rarr; Doon Hospital</div>
+        <div class="pbtn" onclick="loadPreset('isbt')">ISBT Dehradun &rarr; Doon Hospital</div>
+        <div class="pbtn" onclick="loadPreset('patel')">Patel Nagar &rarr; Doon Hospital</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sec-label">Dispatch</div>
+      <button class="go-btn" id="goBtn" onclick="findRoutes()">CALCULATE OPTIMAL ROUTE</button>
+      <button class="reset-btn" id="resetBtn" onclick="resetAll()" style="display:none">Clear Routes</button>
+    </div>
+
+    <div class="section">
+      <div class="sec-label">Map Layers</div>
+      <div class="trow">
+        <div class="tbtn on" id="btn-traffic"   onclick="toggleLayer('traffic')">Traffic Flow</div>
+        <div class="tbtn"    id="btn-incidents" onclick="toggleLayer('incidents')">Incidents</div>
+      </div>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-line" style="background:#27ae60"></div>Free flow</div>
+        <div class="leg-item"><div class="leg-line" style="background:#e67e22"></div>Slow</div>
+        <div class="leg-item"><div class="leg-line" style="background:#c0392b"></div>Congested</div>
+      </div>
+    </div>
+
+    <div class="section" id="resultsSection" style="display:none">
+      <div class="sec-label">Route Comparison</div>
+      <div id="routeCards"></div>
+      <div class="alert-row" id="alertRow"></div>
+    </div>
+
+    <div class="section" id="insightSection" style="display:none">
+      <div class="sec-label">Dispatch Analysis</div>
+      <div class="abox" id="insightBox"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="sbar">
+  <div class="sdot"></div>
+  <span class="stxt" id="statusText">System ready &middot; Enter coordinates or select a preset location</span>
+  <span class="sclock" id="clockEl"></span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════
+// ▶▶ PASTE YOUR TOMTOM API KEY HERE
+//    Free: https://developer.tomtom.com
+// ═══════════════════════════════════════════════════
+function _updateClock() {
+  const now = new Date();
+  const el = document.getElementById("clockEl");
+  if(el) el.textContent = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+setInterval(_updateClock, 1000);
+_updateClock();
+
+const TOMTOM_KEY = "YFpZsg58pIuNVIWX51WPtGuzyD3JqkLi";
+
+// ── Presets ──────────────────────────────────────────
+const PRESETS = {
+  rajpur: { fromLat:30.3433, fromLng:78.0672, toLat:30.3165, toLng:78.0322,
+            fromName:"Rajpur Road", toName:"Doon Hospital" },
+  isbt:   { fromLat:30.2841, fromLng:78.0424, toLat:30.3165, toLng:78.0322,
+            fromName:"ISBT Dehradun", toName:"Doon Hospital" },
+  patel:  { fromLat:30.3289, fromLng:78.0118, toLat:30.3165, toLng:78.0322,
+            fromName:"Patel Nagar", toName:"Doon Hospital" }
+};
+
+function loadPreset(key) {
+  const p = PRESETS[key];
+  document.getElementById("fromLat").value = p.fromLat;
+  document.getElementById("fromLng").value = p.fromLng;
+  document.getElementById("toLat").value   = p.toLat;
+  document.getElementById("toLng").value   = p.toLng;
+  document.getElementById("statusText").textContent =
+    `Loaded: ${p.fromName} → ${p.toName} — Click FIND FASTEST ROUTE`;
+}
+
+// ── State ────────────────────────────────────────────
+let map, trafficLayer, incidentLayer;
+let routeLayers = [], markers = [];
+let layerState  = { traffic:true, incidents:false };
+let running     = false;
+
+// ── Init map ─────────────────────────────────────────
+function initMap() {
+  map = L.map("map", { center:[30.3165, 78.0450], zoom:13 });
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:"© OpenStreetMap", maxZoom:19
+  }).addTo(map);
+
+  // TomTom live traffic flow tiles
+  trafficLayer = L.tileLayer(
+    `https://api.tomtom.com/traffic/map/4/tile/flow/relative/{z}/{x}/{y}.png?key=${TOMTOM_KEY}&thickness=2`,
+    { opacity:0.55, maxZoom:19 }
+  ).addTo(map);
+
+  // TomTom incident tiles
+  incidentLayer = L.tileLayer(
+    `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${TOMTOM_KEY}`,
+    { opacity:0.9, maxZoom:19 }
+  );
+}
+
+// ── Layer toggle ─────────────────────────────────────
+function toggleLayer(type) {
+  layerState[type] = !layerState[type];
+  const btn = document.getElementById("btn-" + type);
+  if (type === "traffic") {
+    layerState.traffic
+      ? trafficLayer.addTo(map)   : map.removeLayer(trafficLayer);
+    btn.classList.toggle("on", layerState.traffic);
+  }
+  if (type === "incidents") {
+    layerState.incidents
+      ? incidentLayer.addTo(map)  : map.removeLayer(incidentLayer);
+    btn.classList.toggle("on", layerState.incidents);
+  }
+}
+
+// ── TomTom API call ───────────────────────────────────
+// routeType: "fastest" (with live traffic) or "shortest" (ignores traffic)
+async function fetchRoute(fromLat, fromLng, toLat, toLng, routeType) {
+  const url =
+    `https://api.tomtom.com/routing/1/calculateRoute/` +
+    `${fromLat},${fromLng}:${toLat},${toLng}/json` +
+    `?routeType=${routeType}` +
+    `&traffic=true` +
+    `&travelMode=car` +
+    `&routeRepresentation=polyline` +
+    `&key=${TOMTOM_KEY}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`TomTom API error ${res.status} — ${txt.slice(0,200)}`);
+  }
+  const data    = await res.json();
+  const route   = data.routes[0];
+  const summary = route.summary;
+  const points  = route.legs[0].points;
+
+  return {
+    etaMin      : Math.round(summary.travelTimeInSeconds / 60),
+    etaSec      : summary.travelTimeInSeconds,
+    distKm      : (summary.lengthInMeters / 1000).toFixed(1),
+    trafficDelay: Math.round((summary.trafficDelayInSeconds || 0) / 60),
+    latlngs     : points.map(p => [p.latitude, p.longitude])
+  };
+}
+
+// ── Draw polyline ─────────────────────────────────────
+function drawLine(latlngs, color, weight, opacity, dash) {
+  const opts = { color, weight, opacity };
+  if (dash) opts.dashArray = dash;
+  const layer = L.polyline(latlngs, opts).addTo(map);
+  routeLayers.push(layer);
+}
+
+function clearAll() {
+  routeLayers.forEach(l => map.removeLayer(l));
+  routeLayers = [];
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+}
+
+// ── Place a pin marker ────────────────────────────────
+function addMarker(lat, lng, emoji, label, color) {
+  const icon = L.divIcon({
+    html:`<div style="background:${color};border:3px solid #fff;border-radius:50%;
+      width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+      font-size:18px;box-shadow:0 3px 14px rgba(0,0,0,0.6)">${emoji}</div>`,
+    className:"", iconSize:[38,38], iconAnchor:[19,19]
+  });
+  const m = L.marker([lat,lng], {icon})
+    .addTo(map)
+    .bindPopup(`<b>${label}</b><br>${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+  markers.push(m);
+  return m;
+}
+
+// ── Render route cards ────────────────────────────────
+function renderCards(r1, r2, loading) {
+  const container = document.getElementById("routeCards");
+  document.getElementById("resultsSection").style.display = "block";
+
+  if (loading) {
+    container.innerHTML = `
+      <div class="rcard">
+        <div class="rheader">
+          <span class="rname">🟢 Route A — Fastest (Live Traffic)</span>
+          <span class="rtag tag-calc"><span class="sp"></span> Calculating</span>
+        </div>
+      </div>
+      <div class="rcard">
+        <div class="rheader">
+          <span class="rname">🔵 Route B — Least Traffic</span>
+          <span class="rtag tag-calc"><span class="sp"></span> Calculating</span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const winner = r1.etaSec <= r2.etaSec ? r1 : r2;
+  const loser  = r1.etaSec <= r2.etaSec ? r2 : r1;
+  const winLabel = r1.etaSec <= r2.etaSec ? "A" : "B";
+  const loseLabel= r1.etaSec <= r2.etaSec ? "B" : "A";
+  const saved = Math.abs(r2.etaMin - r1.etaMin);
+
+  container.innerHTML = `
+    <div class="rcard winner">
+      <div class="rheader">
+        <span class="rname">🟢 Route ${winLabel} — ${winner === r1 ? "Fastest (Live Traffic)" : "Least Traffic"}</span>
+        <span class="rtag tag-sel">✅ SELECTED</span>
+      </div>
+      <div class="rstats">
+        <div class="scell"><div class="sval">${winner.etaMin}m</div><div class="slbl">ETA</div></div>
+        <div class="scell"><div class="sval">${winner.distKm}km</div><div class="slbl">Distance</div></div>
+        <div class="scell">
+          <div class="sval" style="color:${winner.trafficDelay>0?'#ffb74d':'#81c784'}">
+            ${winner.trafficDelay > 0 ? `+${winner.trafficDelay}m` : "Clear"}
+          </div>
+          <div class="slbl">Traffic delay</div>
+        </div>
+      </div>
+      <div class="rnote">
+        ${winner === r1
+          ? `Fastest route with live traffic conditions factored in. TomTom routed around <b>congested roads</b> automatically.`
+          : `Shorter distance route — currently has <b>less traffic delay</b> and arrives faster.`}
+      </div>
+    </div>
+
+    <div class="rcard loser">
+      <div class="rheader">
+        <span class="rname">🔴 Route ${loseLabel} — ${loser === r1 ? "Fastest (Live Traffic)" : "Least Traffic"}</span>
+        <span class="rtag tag-slow">❌ SLOWER</span>
+      </div>
+      <div class="rstats">
+        <div class="scell"><div class="sval">${loser.etaMin}m</div><div class="slbl">ETA</div></div>
+        <div class="scell"><div class="sval">${loser.distKm}km</div><div class="slbl">Distance</div></div>
+        <div class="scell">
+          <div class="sval" style="color:${loser.trafficDelay>0?'#ef9a9a':'#81c784'}">
+            ${loser.trafficDelay > 0 ? `+${loser.trafficDelay}m` : "Clear"}
+          </div>
+          <div class="slbl">Traffic delay</div>
+        </div>
+      </div>
+      <div class="rnote">
+        ${saved > 0
+          ? `<b>${saved} minute${saved!==1?"s":""} slower</b> than the selected route right now.`
+          : `Same ETA as Route ${winLabel} — both routes equally fast right now.`}
+      </div>
+    </div>
+  `;
+}
+
+// ── Render insight ────────────────────────────────────
+function renderInsight(r1, r2) {
+  const saved = Math.abs(r1.etaMin - r2.etaMin);
+  const faster = r1.etaSec <= r2.etaSec ? "A (Fastest)" : "B (Least Traffic)";
+  const maxDelay = Math.max(r1.trafficDelay, r2.trafficDelay);
+
+  let html = `
+    <span class="hi">RapidAid AI</span> selected
+    <b>Route ${faster}</b> — arrives in
+    <span class="stat">${Math.min(r1.etaMin, r2.etaMin)} minutes</span>.<br><br>`;
+
+  if (saved > 0) {
+    html += `The other route would have taken <span class="warn">${saved} extra minute${saved!==1?"s":""}</span>
+    due to current traffic conditions.<br><br>`;
+  } else {
+    html += `Both routes have equal ETA right now — traffic is similar on both paths.<br><br>`;
+  }
+
+  if (maxDelay > 0) {
+    html += `⚠️ Live traffic is adding up to <span class="warn">+${maxDelay} min delay</span>
+    on at least one route — proof the TomTom traffic API is actively influencing routing.<br><br>`;
+  } else {
+    html += `✅ Traffic is currently clear on both routes — TomTom confirms free flow.<br><br>`;
+  }
+
+  html += `💓 In cardiac arrest, each minute matters —
+    <span class="hi">6% lower survival per minute of delay</span>.
+    RapidAid always picks the route that gets there fastest.`;
+
+  document.getElementById("insightBox").innerHTML = html;
+  document.getElementById("insightSection").style.display = "block";
+}
+
+// ── Main function ─────────────────────────────────────
+async function findRoutes() {
+  if (running) return;
+
+  const fromLat = parseFloat(document.getElementById("fromLat").value);
+  const fromLng = parseFloat(document.getElementById("fromLng").value);
+  const toLat   = parseFloat(document.getElementById("toLat").value);
+  const toLng   = parseFloat(document.getElementById("toLng").value);
+
+  // Validate
+  if ([fromLat, fromLng, toLat, toLng].some(v => isNaN(v))) {
+    document.getElementById("statusText").textContent =
+      "❌ Please fill in all 4 coordinate fields or pick a preset.";
+    return;
+  }
+  if (fromLat < -90 || fromLat > 90 || toLat < -90 || toLat > 90) {
+    document.getElementById("statusText").textContent = "❌ Latitude must be between -90 and 90.";
+    return;
+  }
+  if (fromLng < -180 || fromLng > 180 || toLng < -180 || toLng > 180) {
+    document.getElementById("statusText").textContent = "❌ Longitude must be between -180 and 180.";
+    return;
+  }
+
+  running = true;
+  const btn = document.getElementById("goBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="sp"></span>&nbsp; FETCHING LIVE ROUTES...`;
+
+  document.getElementById("statusText").textContent =
+    "Calling TomTom API — fetching fastest route + least-traffic route simultaneously...";
+  document.getElementById("insightSection").style.display = "none";
+
+  clearAll();
+  renderCards(null, null, true);
+
+  // Place origin and destination markers
+  addMarker(fromLat, fromLng, "🔴", "Origin", "#e63946");
+  addMarker(toLat,   toLng,   "🏥", "Destination", "#1565c0");
+
+  try {
+    // Fetch BOTH routes in parallel
+    // Route A = fastest (TomTom picks best path considering live traffic)
+    // Route B = shortest distance (may go through traffic but is physically shorter)
+    const [routeA, routeB] = await Promise.all([
+      fetchRoute(fromLat, fromLng, toLat, toLng, "fastest"),
+      fetchRoute(fromLat, fromLng, toLat, toLng, "shortest")
+    ]);
+
+    // Loser route: thin red dashed
+    drawLine(routeB.latlngs, "#f0c8c5", 5, 0.8, "7, 5");
+    drawLine(routeB.latlngs, "#c0392b", 2, 0.85, "7, 5");
+
+    // Winner route: thin blue solid with white outline
+    drawLine(routeA.latlngs, "#ffffff", 6, 0.85);
+    drawLine(routeA.latlngs, "#1a56a0", 3, 1.0);
+
+    // Fit map to show both routes
+    const allPoints = [...routeA.latlngs, ...routeB.latlngs];
+    map.fitBounds(L.latLngBounds(allPoints), { padding:[40,40] });
+
+    renderCards(routeA, routeB, false);
+    renderInsight(routeA, routeB);
+
+    const winner = routeA.etaSec <= routeB.etaSec ? routeA : routeB;
+    document.getElementById("statusText").textContent =
+      `✅ Best route: ${winner.etaMin} min, ${winner.distKm} km | ` +
+      `Traffic delay: ${winner.trafficDelay > 0 ? `+${winner.trafficDelay} min` : "None"} | ` +
+      `Live TomTom data confirmed`;
+
+    btn.innerHTML = "✅ Routes Found";
+    document.getElementById("resetBtn").style.display = "block";
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById("resultsSection").style.display = "none";
+    document.getElementById("statusText").textContent = "❌ " + err.message;
+    btn.disabled = false;
+    btn.innerHTML = "🔍 FIND FASTEST ROUTE";
+    running = false;
+    return;
+  }
+
+  running = false;
+}
+
+// ── Reset ─────────────────────────────────────────────
+function resetAll() {
+  clearAll();
+  running = false;
+  document.getElementById("goBtn").disabled = false;
+  document.getElementById("goBtn").innerHTML = "🔍 FIND FASTEST ROUTE";
+  document.getElementById("resetBtn").style.display = "none";
+  document.getElementById("resultsSection").style.display = "none";
+  document.getElementById("insightSection").style.display = "none";
+  document.getElementById("statusText").textContent =
+    "Enter coordinates or pick a preset — traffic overlay is live";
+  map.setView([30.3165, 78.0450], 13);
+}
+
+// Allow Enter key to trigger search
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !running) findRoutes();
+});
+
+initMap();
+</script>
+</body>
+</html>
+
+</body>
+</html>

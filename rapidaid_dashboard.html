@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RapidAid AI — Hospital Emergency Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── RESET & BASE ─────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg:        #F4F6F8;
+  --panel:     #FFFFFF;
+  --navy:      #1F4E79;
+  --blue:      #3A6EA5;
+  --red:       #C62828;
+  --amber:     #F9A825;
+  --green:     #2E7D32;
+  --border:    #D8E0EA;
+  --text:      #1A2332;
+  --text-mid:  #4A6080;
+  --text-soft: #7A90A8;
+  --font:      'Source Sans 3', 'Segoe UI', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* ── TOPBAR ───────────────────────────────────────── */
+.topbar {
+  height: 44px;
+  background: var(--navy);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 0;
+  flex-shrink: 0;
+  border-bottom: 2px solid var(--red);
+}
+.tb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 20px;
+  border-right: 1px solid rgba(255,255,255,0.15);
+  margin-right: 20px;
+}
+.tb-logo {
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.8px;
+}
+.tb-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.2px;
+}
+.tb-facility {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+.tb-nav {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+.tb-nav-item {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.2px;
+}
+.tb-nav-item:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.tb-nav-item.active { color: #fff; background: rgba(255,255,255,0.14); }
+.tb-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.tb-clock {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+.tb-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(46,125,50,0.2);
+  border: 1px solid rgba(46,125,50,0.5);
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #81c784;
+  letter-spacing: 0.3px;
+}
+.tb-status-pill.alert {
+  background: rgba(198,40,40,0.2);
+  border-color: rgba(198,40,40,0.5);
+  color: #ef9a9a;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #81c784;
+  animation: livepulse 2s infinite;
+}
+.live-dot.red { background: var(--red); animation: livepulse 0.8s infinite; }
+@keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── ALERT BANNER ─────────────────────────────────── */
+.alert-banner {
+  background: var(--red);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.alert-banner.hidden { display: none; }
+.alert-icon { font-size: 14px; }
+.alert-dismiss {
+  margin-left: auto;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.alert-dismiss:hover { background: rgba(255,255,255,0.3); }
+
+/* ── LAYOUT ───────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── LEFT PANEL ───────────────────────────────────── */
+.left-panel {
+  width: 260px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.panel-header {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-count {
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.panel-count.blue { background: var(--blue); }
+
+/* ── CASE LIST ────────────────────────────────────── */
+.case-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+}
+.case-item:hover { background: #f0f4f8; }
+.case-item.active { background: #eaf0f8; border-left: 3px solid var(--blue); }
+.case-item.active .case-id { color: var(--blue); }
+
+.case-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.case-id { font-size: 12px; font-weight: 700; color: var(--text); }
+.case-priority {
+  font-size: 10px; font-weight: 700; padding: 1px 7px;
+  border-radius: 3px; letter-spacing: 0.3px;
+}
+.p-critical { background: #fdecea; color: var(--red); border: 1px solid #f5c6c6; }
+.p-high     { background: #fff8e1; color: #e65100; border: 1px solid #ffe0b2; }
+.p-medium   { background: #e8f5e9; color: var(--green); border: 1px solid #c8e6c9; }
+
+.case-type { font-size: 12px; color: var(--text-mid); margin-bottom: 3px; }
+.case-meta { font-size: 11px; color: var(--text-soft); display: flex; gap: 10px; }
+.case-eta-pill {
+  position: absolute; right: 14px; bottom: 10px;
+  font-size: 11px; font-weight: 700;
+  color: var(--red); background: #fdecea;
+  padding: 2px 7px; border-radius: 3px;
+}
+.case-eta-pill.ok { color: var(--green); background: #e8f5e9; }
+
+/* ── AMBULANCE LIST ───────────────────────────────── */
+.amb-item {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.amb-item:hover { background: #f0f4f8; }
+.amb-status-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+.s-available { background: var(--green); }
+.s-dispatched { background: var(--red); }
+.s-returning  { background: var(--amber); }
+
+.amb-info { flex: 1; min-width: 0; }
+.amb-id { font-size: 12px; font-weight: 700; color: var(--text); }
+.amb-loc { font-size: 11px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.amb-status-label { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+.sl-available { color: var(--green); }
+.sl-dispatched { color: var(--red); }
+.sl-returning  { color: #e65100; }
+
+/* ── CENTER AREA ──────────────────────────────────── */
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── STATS ROW ────────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.stat-cell {
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stat-cell:last-child { border-right: none; }
+.stat-icon {
+  font-size: 18px;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.stat-data {}
+.stat-val {
+  font-size: 20px; font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stat-val.red   { color: var(--red); }
+.stat-val.green { color: var(--green); }
+.stat-val.amber { color: #e65100; }
+.stat-val.blue  { color: var(--blue); }
+.stat-lbl { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+
+/* ── MAP + DETAIL ROW ─────────────────────────────── */
+.map-detail-row {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── MAP ──────────────────────────────────────────── */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+#map { width: 100%; height: 100%; }
+
+.map-overlay-card {
+  position: absolute;
+  top: 10px; left: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  z-index: 999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  min-width: 180px;
+}
+.moc-title { font-size: 10px; font-weight: 700; color: var(--text-soft); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
+.moc-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-mid); margin-bottom: 4px; }
+.moc-item:last-child { margin-bottom: 0; }
+.moc-line { width: 18px; height: 3px; border-radius: 2px; }
+.moc-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── RIGHT DETAIL PANEL ───────────────────────────── */
+.detail-panel {
+  width: 300px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* ── SECTION BLOCK ────────────────────────────────── */
+.sec-block { border-bottom: 1px solid var(--border); }
+.sec-title {
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sec-body { padding: 12px 14px; }
+
+/* ── ETA HERO ─────────────────────────────────────── */
+.eta-hero {
+  background: var(--navy);
+  padding: 14px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.eta-left {}
+.eta-label { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55); letter-spacing: 1px; text-transform: uppercase; }
+.eta-value { font-size: 36px; font-weight: 700; color: #fff; line-height: 1; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.eta-unit  { font-size: 14px; color: rgba(255,255,255,0.7); }
+.eta-right { text-align: right; }
+.eta-dist  { font-size: 18px; font-weight: 700; color: #fff; }
+.eta-dist-lbl { font-size: 10px; color: rgba(255,255,255,0.55); margin-top: 2px; letter-spacing: 0.5px; }
+
+/* ── STATUS TRACK ─────────────────────────────────── */
+.status-track {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.st-step {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  position: relative;
+}
+.st-step::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  margin-bottom: 4px;
+}
+.st-step.done::before  { background: var(--green); }
+.st-step.active::before{ background: var(--blue); }
+.st-step.done  { color: var(--green); }
+.st-step.active{ color: var(--blue); }
+
+/* ── INFO ROWS ────────────────────────────────────── */
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--bg);
+  gap: 8px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-key   { font-size: 12px; color: var(--text-soft); flex-shrink: 0; }
+.info-val   { font-size: 12px; font-weight: 600; color: var(--text); text-align: right; }
+.info-val.red   { color: var(--red); }
+.info-val.green { color: var(--green); }
+.info-val.amber { color: #e65100; }
+
+/* ── ALERT ITEM ───────────────────────────────────── */
+.alert-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+  align-items: flex-start;
+}
+.alert-item:last-child { border-bottom: none; }
+.alert-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 3px;
+}
+.alert-dot.red    { background: var(--red); }
+.alert-dot.amber  { background: var(--amber); }
+.alert-dot.green  { background: var(--green); }
+.alert-dot.blue   { background: var(--blue); }
+.alert-text { font-size: 12px; color: var(--text-mid); line-height: 1.45; flex: 1; }
+.alert-text b { color: var(--text); font-weight: 600; }
+.alert-time { font-size: 10px; color: var(--text-soft); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+/* ── TIMELINE ─────────────────────────────────────── */
+.tl-item {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  align-items: flex-start;
+}
+.tl-time { font-size: 11px; color: var(--text-soft); font-variant-numeric: tabular-nums; flex-shrink: 0; width: 40px; }
+.tl-dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); flex-shrink: 0; margin-top: 3px; }
+.tl-dot.red { background: var(--red); }
+.tl-dot.green { background: var(--green); }
+.tl-text { font-size: 12px; color: var(--text-mid); line-height: 1.4; }
+.tl-text b { color: var(--text); font-weight: 600; }
+
+/* ── BUTTONS ──────────────────────────────────────── */
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.btn {
+  padding: 7px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s;
+  border: none;
+  letter-spacing: 0.2px;
+}
+.btn-primary   { background: var(--navy); color: #fff; }
+.btn-primary:hover { background: #163a5f; }
+.btn-secondary { background: var(--bg); color: var(--text-mid); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #e4e9ef; border-color: #b8c4d0; }
+.btn-danger    { background: var(--red); color: #fff; }
+.btn-danger:hover { background: #a31e1e; }
+.btn-warn      { background: var(--amber); color: #fff; }
+.btn-warn:hover { background: #e09000; }
+
+/* ── STATUSBAR ────────────────────────────────────── */
+.statusbar {
+  height: 28px;
+  background: #1a2e45;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 20px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+}
+.sb-dot { width: 6px; height: 6px; border-radius: 50%; }
+.sb-dot.green { background: var(--green); }
+.sb-dot.red   { background: var(--red); animation: livepulse 1s infinite; }
+.sb-dot.amber { background: var(--amber); }
+
+/* ── LEAFLET OVERRIDE ─────────────────────────────── */
+.leaflet-popup-content-wrapper {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.leaflet-popup-tip { background: #fff; }
+.leaflet-popup-content { font-size: 12px; font-family: var(--font); color: var(--text); margin: 10px 13px; line-height: 1.5; }
+.leaflet-popup-content b { color: var(--navy); }
+.leaflet-control-zoom a { font-family: var(--font) !important; color: var(--navy) !important; }
+
+/* ── HOSPITAL CAPACITY BAR ────────────────────────── */
+.cap-bar-wrap { margin-top: 4px; }
+.cap-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-soft); margin-bottom: 3px; }
+.cap-bar-track { height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
+.cap-bar-fill  { height: 100%; border-radius: 3px; }
+
+/* ── HOSPITAL CARD ────────────────────────────────── */
+.hosp-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.hosp-card:last-child { margin-bottom: 0; }
+.hosp-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.hosp-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.hosp-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
+.hb-ready  { background: #e8f5e9; color: var(--green); }
+.hb-busy   { background: #fff8e1; color: #e65100; }
+.hb-full   { background: #fdecea; color: var(--red); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-brand">
+    <span class="tb-logo">EMS</span>
+    <span class="tb-name">RapidAid AI</span>
+  </div>
+  <span class="tb-facility">Doon Hospital — Emergency Control Centre, Dehradun</span>
+  <nav class="tb-nav" style="margin-left:16px">
+    <div class="tb-nav-item active">Live Dispatch</div>
+    <div class="tb-nav-item">Fleet</div>
+    <div class="tb-nav-item">Hospitals</div>
+    <div class="tb-nav-item">Reports</div>
+  </nav>
+  <div class="tb-right">
+    <div class="tb-status-pill alert">
+      <div class="live-dot red"></div>
+      2 ACTIVE EMERGENCIES
+    </div>
+    <div class="tb-status-pill">
+      <div class="live-dot"></div>
+      SYSTEM ONLINE
+    </div>
+    <div class="tb-clock" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<!-- ALERT BANNER -->
+<div class="alert-banner" id="alertBanner">
+  <span class="alert-icon">⚠</span>
+  CRITICAL — Cardiac arrest patient inbound · AMB-03 · ETA 6 min · Trauma Bay 2 notified
+  <button class="alert-dismiss" onclick="document.getElementById('alertBanner').classList.add('hidden')">Acknowledge</button>
+</div>
+
+<div class="body">
+
+  <!-- LEFT — CASES + AMBULANCES -->
+  <div class="left-panel">
+
+    <div class="panel-header">
+      Active Cases
+      <span class="panel-count">2</span>
+    </div>
+
+    <div class="case-item active" onclick="selectCase(this)">
+      <div class="case-header">
+        <span class="case-id">INC-2847</span>
+        <span class="case-priority p-critical">CRITICAL</span>
+      </div>
+      <div class="case-type">Cardiac Arrest — Male, 58</div>
+      <div class="case-meta">
+        <span>AMB-03</span>
+        <span>Rajpur Road</span>
+      </div>
+      <span class="case-eta-pill">6 min</span>
+    </div>
+
+    <div class="case-item" onclick="selectCase(this)">
+      <div class="case-header">
+        <span class="case-id">INC-2846</span>
+        <span class="case-priority p-high">HIGH</span>
+      </div>
+      <div class="case-type">Road Accident — Female, 34</div>
+      <div class="case-meta">
+        <span>AMB-01</span>
+        <span>ISBT Area</span>
+      </div>
+      <span class="case-eta-pill">14 min</span>
+    </div>
+
+    <div class="case-item" onclick="selectCase(this)">
+      <div class="case-header">
+        <span class="case-id">INC-2845</span>
+        <span class="case-priority p-medium">MODERATE</span>
+      </div>
+      <div class="case-type">Fracture — Male, 22</div>
+      <div class="case-meta">
+        <span>AMB-05</span>
+        <span>Patel Nagar</span>
+      </div>
+      <span class="case-eta-pill ok">Arrived</span>
+    </div>
+
+    <div class="panel-header" style="margin-top:4px">
+      Ambulance Fleet
+      <span class="panel-count blue">5</span>
+    </div>
+
+    <div class="amb-item">
+      <div class="amb-status-dot s-dispatched"></div>
+      <div class="amb-info">
+        <div class="amb-id">AMB-01 — Basic LS</div>
+        <div class="amb-loc">En route → Doon Hospital</div>
+      </div>
+      <div class="amb-status-label sl-dispatched">Dispatched</div>
+    </div>
+
+    <div class="amb-item">
+      <div class="amb-status-dot s-available"></div>
+      <div class="amb-info">
+        <div class="amb-id">AMB-02 — Advanced LS</div>
+        <div class="amb-loc">Dalanwala Stand — Standby</div>
+      </div>
+      <div class="amb-status-label sl-available">Available</div>
+    </div>
+
+    <div class="amb-item">
+      <div class="amb-status-dot s-dispatched"></div>
+      <div class="amb-info">
+        <div class="amb-id">AMB-03 — Advanced LS</div>
+        <div class="amb-loc">En route → Doon Hospital</div>
+      </div>
+      <div class="amb-status-label sl-dispatched">Dispatched</div>
+    </div>
+
+    <div class="amb-item">
+      <div class="amb-status-dot s-available"></div>
+      <div class="amb-info">
+        <div class="amb-id">AMB-04 — Basic LS</div>
+        <div class="amb-loc">Clock Tower — Standby</div>
+      </div>
+      <div class="amb-status-label sl-available">Available</div>
+    </div>
+
+    <div class="amb-item">
+      <div class="amb-status-dot s-returning"></div>
+      <div class="amb-info">
+        <div class="amb-id">AMB-05 — Basic LS</div>
+        <div class="amb-loc">Returning to base</div>
+      </div>
+      <div class="amb-status-label sl-returning">Returning</div>
+    </div>
+
+    <div style="padding:10px 14px; border-top: 1px solid var(--border); margin-top:auto;">
+      <button class="btn btn-primary" style="width:100%;margin-bottom:5px">Assign Ambulance</button>
+      <button class="btn btn-secondary" style="width:100%">View Fleet Registry</button>
+    </div>
+
+  </div><!-- /left-panel -->
+
+  <!-- CENTER -->
+  <div class="center">
+
+    <!-- STATS ROW -->
+    <div class="stats-row">
+      <div class="stat-cell">
+        <div class="stat-icon">🚑</div>
+        <div class="stat-data">
+          <div class="stat-val red">2</div>
+          <div class="stat-lbl">Active dispatches</div>
+        </div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-icon">🏥</div>
+        <div class="stat-data">
+          <div class="stat-val green">2</div>
+          <div class="stat-lbl">Units available</div>
+        </div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-icon">⏱</div>
+        <div class="stat-data">
+          <div class="stat-val blue" id="avgEta">8.4</div>
+          <div class="stat-lbl">Avg ETA (min)</div>
+        </div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-icon">🛏</div>
+        <div class="stat-data">
+          <div class="stat-val amber">3</div>
+          <div class="stat-lbl">ER beds free</div>
+        </div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-icon">✅</div>
+        <div class="stat-data">
+          <div class="stat-val green">12</div>
+          <div class="stat-lbl">Cases today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP + DETAIL -->
+    <div class="map-detail-row">
+
+      <div class="map-container">
+        <div id="map"></div>
+
+        <!-- Map legend overlay -->
+        <div class="map-overlay-card">
+          <div class="moc-title">Map Legend</div>
+          <div class="moc-item"><div class="moc-dot" style="background:var(--red)"></div>Ambulance (dispatched)</div>
+          <div class="moc-item"><div class="moc-dot" style="background:var(--green)"></div>Ambulance (standby)</div>
+          <div class="moc-item"><div class="moc-dot" style="background:var(--blue); border-radius:3px"></div>Hospital</div>
+          <div class="moc-item"><div class="moc-dot" style="background:var(--red); animation:livepulse 0.8s infinite"></div>Active emergency</div>
+          <div class="moc-item"><div class="moc-line" style="background:var(--blue)"></div>Primary route</div>
+          <div class="moc-item" style="opacity:0.7"><div class="moc-line" style="background:#8ab0d0; border-top: 2px dashed #8ab0d0; height:0"></div>Alt. route</div>
+        </div>
+      </div>
+
+      <!-- RIGHT DETAIL PANEL -->
+      <div class="detail-panel">
+
+        <!-- ETA + status -->
+        <div class="sec-block">
+          <div class="sec-title">INC-2847 — Active Dispatch</div>
+          <div class="sec-body">
+
+            <div class="eta-hero">
+              <div class="eta-left">
+                <div class="eta-label">Ambulance ETA</div>
+                <div class="eta-value"><span id="etaCount">6</span> <span class="eta-unit">min</span></div>
+              </div>
+              <div class="eta-right">
+                <div class="eta-dist">3.2 km</div>
+                <div class="eta-dist-lbl">Distance remaining</div>
+              </div>
+            </div>
+
+            <div class="status-track">
+              <div class="st-step done">Called</div>
+              <div class="st-step done">Dispatched</div>
+              <div class="st-step active">En Route</div>
+              <div class="st-step">Arriving</div>
+              <div class="st-step">Received</div>
+            </div>
+
+            <div class="info-row">
+              <span class="info-key">Unit</span>
+              <span class="info-val">AMB-03 — Advanced Life Support</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Driver</span>
+              <span class="info-val">Ravi Kumar — +91 98765 43210</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Traffic delay</span>
+              <span class="info-val amber">+2 min (Rajpur Rd)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Route type</span>
+              <span class="info-val green">Fastest (AI-selected)</span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary">Notify Hospital</button>
+            <button class="btn btn-secondary">Call Driver</button>
+            <button class="btn btn-danger">Reassign</button>
+          </div>
+        </div>
+
+        <!-- Patient info -->
+        <div class="sec-block">
+          <div class="sec-title">Patient Information</div>
+          <div class="sec-body">
+            <div class="info-row">
+              <span class="info-key">Incident type</span>
+              <span class="info-val red">Cardiac Arrest</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Patient</span>
+              <span class="info-val">Male, approx. 58 yrs</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Condition</span>
+              <span class="info-val red">Unresponsive — CPR in progress</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Location</span>
+              <span class="info-val">Rajpur Road, near hotel</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Destination</span>
+              <span class="info-val">Doon Hospital — Trauma Bay 2</span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary">View Case Details</button>
+            <button class="btn btn-secondary">Update Status</button>
+          </div>
+        </div>
+
+        <!-- ER Preparation alerts -->
+        <div class="sec-block">
+          <div class="sec-title">ER Preparation Alerts</div>
+          <div class="sec-body">
+            <div class="alert-item">
+              <div class="alert-dot red"></div>
+              <div class="alert-text"><b>Trauma Bay 2 — prepare defibrillator</b><br>Cardiac arrest. Advanced ALS unit inbound.</div>
+              <div class="alert-time">14:31</div>
+            </div>
+            <div class="alert-item">
+              <div class="alert-dot amber"></div>
+              <div class="alert-text"><b>Blood bank — type O ready</b><br>Road accident patient ETA 14 min.</div>
+              <div class="alert-time">14:28</div>
+            </div>
+            <div class="alert-item">
+              <div class="alert-dot green"></div>
+              <div class="alert-text"><b>INC-2845 patient received</b><br>Fracture case, stable. Bay 4 cleared.</div>
+              <div class="alert-time">14:19</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Incident timeline -->
+        <div class="sec-block">
+          <div class="sec-title">Incident Timeline — INC-2847</div>
+          <div class="sec-body">
+            <div class="tl-item">
+              <div class="tl-time">14:26</div>
+              <div class="tl-dot red"></div>
+              <div class="tl-text"><b>Emergency call received</b> — Rajpur Road cardiac arrest reported</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-time">14:27</div>
+              <div class="tl-dot"></div>
+              <div class="tl-text"><b>AI Dispatch</b> — ETA calculated for 5 units. AMB-03 selected (6 min fastest)</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-time">14:27</div>
+              <div class="tl-dot"></div>
+              <div class="tl-text"><b>AMB-03 dispatched</b> — Driver Ravi Kumar notified</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-time">14:28</div>
+              <div class="tl-dot"></div>
+              <div class="tl-text"><b>Hospital notified</b> — Doon Hospital ER pre-alert sent</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-time">14:31</div>
+              <div class="tl-dot red"></div>
+              <div class="tl-text"><b>5-min ETA alert</b> — Trauma Bay 2 preparation triggered</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hospital capacity -->
+        <div class="sec-block">
+          <div class="sec-title">Nearby Hospital Capacity</div>
+          <div class="sec-body">
+
+            <div class="hosp-card">
+              <div class="hosp-card-header">
+                <span class="hosp-name">🏥 Doon Hospital</span>
+                <span class="hosp-badge hb-ready">READY</span>
+              </div>
+              <div class="cap-bar-wrap">
+                <div class="cap-bar-label"><span>ER Capacity</span><span>3 beds free</span></div>
+                <div class="cap-bar-track"><div class="cap-bar-fill" style="width:70%;background:var(--amber)"></div></div>
+              </div>
+              <div style="font-size:11px;color:var(--text-soft);margin-top:5px">Trauma · ICU · Cardiac</div>
+            </div>
+
+            <div class="hosp-card">
+              <div class="hosp-card-header">
+                <span class="hosp-name">🏥 Mahant Indiresh Hospital</span>
+                <span class="hosp-badge hb-busy">MODERATE</span>
+              </div>
+              <div class="cap-bar-wrap">
+                <div class="cap-bar-label"><span>ER Capacity</span><span>1 bed free</span></div>
+                <div class="cap-bar-track"><div class="cap-bar-fill" style="width:88%;background:var(--red)"></div></div>
+              </div>
+              <div style="font-size:11px;color:var(--text-soft);margin-top:5px">General · Ortho · Surgery</div>
+            </div>
+
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-secondary">View All Hospitals</button>
+            <button class="btn btn-secondary">Generate Report</button>
+          </div>
+        </div>
+
+      </div><!-- /detail-panel -->
+    </div><!-- /map-detail-row -->
+
+  </div><!-- /center -->
+
+</div><!-- /body -->
+
+<!-- STATUSBAR -->
+<div class="statusbar">
+  <div class="sb-item"><div class="sb-dot green"></div>Firebase — Connected</div>
+  <div class="sb-item"><div class="sb-dot green"></div>TomTom API — Live</div>
+  <div class="sb-item"><div class="sb-dot red"></div>2 emergencies active</div>
+  <div class="sb-item"><div class="sb-dot green"></div>GPS tracking — 5/5 units</div>
+  <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.3)">RapidAid AI v1.0 · Dehradun EMS · Session: OPR-44</div>
+</div>
+
+</div><!-- /app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── Clock ──────────────────────────────────────────
+function tick() {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString("en-IN", { hour12:false });
+}
+tick(); setInterval(tick, 1000);
+
+// ── ETA Countdown ──────────────────────────────────
+let eta = 6 * 60; // seconds
+function countDown() {
+  if (eta <= 0) {
+    document.getElementById("etaCount").textContent = "0";
+    return;
+  }
+  eta--;
+  document.getElementById("etaCount").textContent = Math.ceil(eta / 60);
+}
+setInterval(countDown, 1000);
+
+// ── Case selection ─────────────────────────────────
+function selectCase(el) {
+  document.querySelectorAll(".case-item").forEach(c => c.classList.remove("active"));
+  el.classList.add("active");
+}
+
+// ── Map ────────────────────────────────────────────
+const map = L.map("map", { center:[30.3200, 78.0420], zoom:14, zoomControl:true });
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution:"© OpenStreetMap", maxZoom:19
+}).addTo(map);
+
+// Hospital marker
+const hospIcon = L.divIcon({
+  html:`<div style="background:#1F4E79;border:2px solid #fff;border-radius:3px;
+    width:14px;height:14px;box-shadow:0 1px 5px rgba(0,0,0,0.3)"></div>`,
+  className:"", iconSize:[14,14], iconAnchor:[7,7]
+});
+L.marker([30.3165, 78.0322], {icon:hospIcon})
+  .addTo(map)
+  .bindPopup("<b>Doon Hospital</b><br>Trauma Centre — Destination");
+
+// Ambulance icons — dispatched (red)
+function ambIcon(color) {
+  return L.divIcon({
+    html:`<div style="background:${color};border:2px solid #fff;border-radius:50%;
+      width:12px;height:12px;box-shadow:0 1px 5px rgba(0,0,0,0.3)"></div>`,
+    className:"", iconSize:[12,12], iconAnchor:[6,6]
+  });
+}
+
+// Emergency markers — flashing
+function emergIcon() {
+  return L.divIcon({
+    html:`<div style="background:#C62828;border:2px solid #fff;border-radius:50%;
+      width:14px;height:14px;box-shadow:0 1px 8px rgba(198,40,40,0.6);
+      animation:livepulse 0.7s infinite"></div>`,
+    className:"", iconSize:[14,14], iconAnchor:[7,7]
+  });
+}
+
+// Standby ambulances
+L.marker([30.3350, 78.0510], {icon:ambIcon("#2E7D32")}).addTo(map)
+  .bindPopup("<b>AMB-02</b> — Advanced LS<br>Status: <b style='color:#2E7D32'>Standby</b><br>Dalanwala Stand");
+L.marker([30.3080, 78.0390], {icon:ambIcon("#2E7D32")}).addTo(map)
+  .bindPopup("<b>AMB-04</b> — Basic LS<br>Status: <b style='color:#2E7D32'>Standby</b><br>Clock Tower");
+
+// Dispatched ambulances
+L.marker([30.3433, 78.0672], {icon:ambIcon("#C62828")}).addTo(map)
+  .bindPopup("<b>AMB-03</b> — Advanced LS<br>Status: <b style='color:#C62828'>Dispatched</b><br>ETA: 6 min — Cardiac arrest");
+L.marker([30.2841, 78.0424], {icon:ambIcon("#C62828")}).addTo(map)
+  .bindPopup("<b>AMB-01</b> — Basic LS<br>Status: <b style='color:#C62828'>Dispatched</b><br>ETA: 14 min — Road accident");
+
+// Emergency markers
+L.marker([30.3433, 78.0680], {icon:emergIcon()}).addTo(map)
+  .bindPopup("<b style='color:#C62828'>EMERGENCY — INC-2847</b><br>Cardiac Arrest · Male 58<br>Rajpur Road");
+L.marker([30.2850, 78.0410], {icon:emergIcon()}).addTo(map)
+  .bindPopup("<b style='color:#C62828'>EMERGENCY — INC-2846</b><br>Road Accident · Female 34<br>ISBT Area");
+
+// Primary route — AMB-03 → Hospital (solid blue)
+const route1 = [
+  [30.3433, 78.0672],[30.3380, 78.0620],[30.3310, 78.0550],
+  [30.3250, 78.0470],[30.3200, 78.0410],[30.3165, 78.0322]
+];
+L.polyline(route1, { color:"#3A6EA5", weight:3, opacity:1, lineJoin:"round" }).addTo(map);
+
+// Alt route — dashed light blue
+const route1alt = [
+  [30.3433, 78.0672],[30.3400, 78.0580],[30.3300, 78.0480],
+  [30.3220, 78.0400],[30.3165, 78.0322]
+];
+L.polyline(route1alt, { color:"#8ab0d0", weight:2, opacity:0.7, dashArray:"7,5" }).addTo(map);
+
+// Route AMB-01
+const route2 = [
+  [30.2841, 78.0424],[30.2900, 78.0380],[30.2980, 78.0350],
+  [30.3060, 78.0330],[30.3165, 78.0322]
+];
+L.polyline(route2, { color:"#3A6EA5", weight:3, opacity:0.7, lineJoin:"round" }).addTo(map);
+</script>
+</body>
+</html>
