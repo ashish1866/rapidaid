@@ -52,9 +52,9 @@ on a clear road. RapidAid fixes this.
 
 ## Team
 Ashish Bisht — Backend & API Integration
-[Name 2] — Frontend & Firebase  
-[Name 3] — Research & UI
-[Name 4] — Systems & Routing
+[Vinam Sharma] — Frontend & Firebase  
+[Tarika Singla] — Research & UI
+[Saurabh Rajak] — Systems & Routing
 
 ## Contact
 ashishbisht170249@gmail.com
